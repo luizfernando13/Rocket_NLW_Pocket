@@ -11,81 +11,137 @@ dayjs.tz.setDefault("America/Sao_Paulo");
 
 interface CreateGoalCompletionRequest {
   goalId: string;
-  createdAt?: string; // Campo opcional para a data de conclusão
+  userId: string;
+  createdAt?: string;
 }
+
+// Mutex para garantir que uma conclusão de meta seja processada por vez
+const goalCompletionLocks: { [key: string]: Promise<void> | null } = {};
 
 export async function createGoalCompletion({
   goalId,
-  createdAt, // Recebendo opcionalmente a data
+  userId,
+  createdAt,
 }: CreateGoalCompletionRequest) {
-  const firstDayOfWeek = dayjs().startOf('week').tz('America/Sao_Paulo').toDate();
-  const lastDayOfWeek = dayjs().endOf('week').tz('America/Sao_Paulo').toDate();
 
-  // Verifica se o `createdAt` foi passado na requisição; se sim, utiliza, senão usa a data atual
-  const nowTz = createdAt
-    ? dayjs(createdAt).tz('America/Sao_Paulo').utc().toDate() // Converte o `createdAt` recebido para UTC
-    : dayjs().tz('America/Sao_Paulo').utc().toDate(); // Se não foi passado, usa a data atual
+  // Se houver uma operação em andamento para essa meta, espera até que seja concluída
+  if (goalCompletionLocks[goalId]) {
+    await goalCompletionLocks[goalId];
+  }
 
-  console.log("Now (UTC):", nowTz); // Essa será a data que será salva no banco, convertida para UTC
+  // Inicializando o resolveLock como undefined e atribuindo o valor dentro da Promise
+  let resolveLock: (() => void) | undefined;
+  goalCompletionLocks[goalId] = new Promise((resolve) => {
+    resolveLock = resolve;
+  });
 
-  const goalCompletionCounts = db.$with('goal_completion_counts').as(
-    db
-      .select({
-        goalId: goalCompletions.goalId,
-        completionCount: count(goalCompletions.id).as('completionCount'),
-      })
+  try {
+    // Verifica se a meta pertence ao usuário
+    const [goal] = await db
+      .select()
+      .from(goals)
+      .where(
+        and(
+          eq(goals.id, goalId),
+          eq(goals.userId, userId)
+        )
+      )
+      .limit(1);
+
+    if (!goal) {
+      throw new Error('Meta não encontrada ou não pertence ao usuário.');
+    }
+
+    const firstDayOfWeek = dayjs().startOf('week').tz('America/Sao_Paulo').toDate();
+    const lastDayOfWeek = dayjs().endOf('week').tz('America/Sao_Paulo').toDate();
+
+    const nowTz = createdAt
+      ? dayjs(createdAt).tz('America/Sao_Paulo').utc().toDate()
+      : dayjs().tz('America/Sao_Paulo').utc().toDate();
+
+    console.log("Now (UTC):", nowTz);
+
+    const twoMinutesAgo = dayjs().tz('America/Sao_Paulo').subtract(2, 'minute').utc().toDate();
+
+    // Verifica se já existe uma conclusão da mesma meta nos últimos 2 minutos
+    const recentCompletion = await db
+      .select()
       .from(goalCompletions)
       .where(
         and(
-          gte(goalCompletions.createdAt, firstDayOfWeek),
-          lte(goalCompletions.createdAt, lastDayOfWeek),
-          eq(goalCompletions.goalId, goalId)
+          eq(goalCompletions.goalId, goalId),
+          eq(goalCompletions.userId, userId),
+          gte(goalCompletions.createdAt, twoMinutesAgo)
         )
       )
-      .groupBy(goalCompletions.goalId)
-  );
+      .limit(1);
 
-  const result = await db
-    .with(goalCompletionCounts)
-    .select({
-      desiredWeeklyFrequency: goals.desiredWeeklyFrequency,
-      completionCount: sql`
-      COALESCE(${goalCompletionCounts.completionCount}, 0)
-      `.mapWith(Number),
-    })
-    .from(goals)
-    .leftJoin(goalCompletionCounts, eq(goalCompletionCounts.goalId, goals.id))
-    .where(eq(goals.id, goalId))
-    .limit(1);
+    if (recentCompletion.length > 0) {
+      throw new Error('Você já completou esta meta nos últimos 2 minutos. Aguarde para tentar novamente.');
+    }
 
-  if (!result.length) {
-    throw new Error('Goal not found!');
+    const goalCompletionCounts = db.$with('goal_completion_counts').as(
+      db
+        .select({
+          goalId: goalCompletions.goalId,
+          completionCount: count(goalCompletions.id).as('completionCount'),
+        })
+        .from(goalCompletions)
+        .where(
+          and(
+            gte(goalCompletions.createdAt, firstDayOfWeek),
+            lte(goalCompletions.createdAt, lastDayOfWeek),
+            eq(goalCompletions.goalId, goalId)
+          )
+        )
+        .groupBy(goalCompletions.goalId)
+    );
+
+    const result = await db
+      .with(goalCompletionCounts)
+      .select({
+        desiredWeeklyFrequency: goals.desiredWeeklyFrequency,
+        completionCount: sql`
+        COALESCE(${goalCompletionCounts.completionCount}, 0)
+        `.mapWith(Number),
+      })
+      .from(goals)
+      .leftJoin(goalCompletionCounts, eq(goalCompletionCounts.goalId, goals.id))
+      .where(eq(goals.id, goalId))
+      .limit(1);
+
+    if (!result.length) {
+      throw new Error('Goal not found!');
+    }
+
+    const { completionCount, desiredWeeklyFrequency } = result[0];
+
+    if (completionCount >= desiredWeeklyFrequency) {
+      throw new Error('Você já completou essa meta o número máximo de vezes nesta semana!');
+    }
+
+    // Agora salvando diretamente a data no formato UTC
+    const insertResult = await db
+      .insert(goalCompletions)
+      .values({
+        goalId,
+        userId,
+        createdAt: nowTz,
+      })
+      .returning();
+
+    const goalCompletion = insertResult[0];
+    console.log("Inserted Goal Completion:", goalCompletion);
+
+    return {
+      goalCompletion,
+    };
+
+  } finally {
+    // Libera a trava ao final do processamento, se a trava existir
+    if (resolveLock) {
+      resolveLock();
+    }
+    goalCompletionLocks[goalId] = null;
   }
-
-  const { completionCount, desiredWeeklyFrequency } = result[0];
-
-  // Garantir que completionCount e desiredWeeklyFrequency estejam definidos e sejam valores numéricos
-  if (typeof completionCount !== 'number' || typeof desiredWeeklyFrequency !== 'number') {
-    throw new Error('Invalid data for goal completion or frequency!');
-  }
-
-  if (completionCount >= desiredWeeklyFrequency) {
-    throw new Error('Goal already completed the maximum number of times this week!');
-  }
-
-  // Agora salvando diretamente a data no formato UTC
-  const insertResult = await db
-    .insert(goalCompletions)
-    .values({
-      goalId,
-      createdAt: nowTz,  // Salvando como `Date` no fuso horário UTC (mesmo horário, diferente timezone)
-    })
-    .returning();
-
-  const goalCompletion = insertResult[0];
-  console.log("Inserted Goal Completion:", goalCompletion);
-
-  return {
-    goalCompletion,
-  };
 }

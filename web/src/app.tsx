@@ -1,27 +1,29 @@
-// JSX
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { RegisterForm } from './components/RegisterForm';
+import { LoginForm } from './components/LoginForm';
+import { PrivateRoute } from './components/PrivateRoute';
+import { AuthProvider } from './AuthContext';
+import Dashboard from './components/Dashboard';
 
-import { Dialog } from './components/ui/dialog'
-import { CreateGoal } from './components/create-goal'
-import { EmptyGoals } from './components/empty-goals'
-import { Summary } from './components/summary'
-import { useQuery } from '@tanstack/react-query'
-import { getSummary } from './http/get-summary'
-
-export function App() {
-  const { data } = useQuery({
-    queryKey: ['summary'],
-    queryFn: getSummary,
-    staleTime: 1000 * 60,
-  })
-
-  
-  // console.log(data)
-  // console.log(data?.total)
+function App() {
   return (
-    <Dialog>
-      {data?.total && data?.total > 0 ? <Summary /> : <EmptyGoals />}
-
-      <CreateGoal />
-    </Dialog>
-  )
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/register" element={<RegisterForm />} />
+          <Route path="/login" element={<LoginForm />} />
+          <Route
+            path="/"
+            element={
+              <PrivateRoute>
+                <Dashboard />
+              </PrivateRoute>
+            }
+          />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  );
 }
+
+export default App;

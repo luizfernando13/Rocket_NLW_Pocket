@@ -1,3 +1,5 @@
+// back-end\src\functions\get-week-pending-goals.ts
+
 import dayjs from 'dayjs'
 import weekOfYear from 'dayjs/plugin/weekOfYear'
 import { db } from '../db'
@@ -6,7 +8,11 @@ import { and, count, eq, gte, lte, sql } from 'drizzle-orm'
 
 dayjs.extend(weekOfYear)
 
-export async function getWeekPendingGoals() {
+interface GetWeekPendingGoalsParams {
+  userId: string;
+}
+
+export async function getWeekPendingGoals({ userId }: GetWeekPendingGoalsParams) {
   const firstDayOfWeek = dayjs().startOf('week').toDate()
   const lastDayOfWeek = dayjs().endOf('week').toDate()
 
@@ -19,7 +25,12 @@ export async function getWeekPendingGoals() {
         createdAt: goals.createdAt,
       })
       .from(goals)
-      .where(lte(goals.createdAt, lastDayOfWeek))
+      .where(
+        and(
+          lte(goals.createdAt, lastDayOfWeek),
+          eq(goals.userId, userId) // Filtra pelo userId
+        )
+      )
   )
 
   const goalCompletionCounts = db.$with('goal_completion_counts').as(
@@ -29,10 +40,12 @@ export async function getWeekPendingGoals() {
         completionCount: count(goalCompletions.id).as('completionCount'),
       })
       .from(goalCompletions)
+      .innerJoin(goals, eq(goals.id, goalCompletions.goalId))
       .where(
         and(
           gte(goalCompletions.createdAt, firstDayOfWeek),
-          lte(goalCompletions.createdAt, lastDayOfWeek)
+          lte(goalCompletions.createdAt, lastDayOfWeek),
+          eq(goals.userId, userId) // Filtro pelo userId
         )
       )
       .groupBy(goalCompletions.goalId)

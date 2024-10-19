@@ -5,11 +5,13 @@ import { goals } from '../db/schema';
 interface CreateGoalRequest {
   title: string;
   desiredWeeklyFrequency: number;
+  userId: string;
 }
 
 export async function createGoal({
   title,
   desiredWeeklyFrequency,
+  userId
 }: CreateGoalRequest) {
   // Verificar se já existe uma meta com o mesmo título
   const existingGoal = await db
@@ -29,6 +31,7 @@ export async function createGoal({
     .values({
       title,
       desiredWeeklyFrequency,
+      userId
     })
     .returning();
 

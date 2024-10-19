@@ -1,3 +1,5 @@
+import { apiFetch } from "./api";
+
 type PendingGoalsResponse = {
   id: string;
   title: string;
@@ -6,10 +8,16 @@ type PendingGoalsResponse = {
 }[]
 
 export async function getPendingGoals(): Promise<PendingGoalsResponse> {
-  //const apiUrl = import.meta.env.VITE_API_URL
-  const apiUrl = 'https://rocket-nlw-pocket.onrender.com/'
-  const response = await fetch(`${apiUrl}pending-goals`)
-  const data = await response.json()
+  const apiUrl = import.meta.env.VITE_API_URL;
+  const token = localStorage.getItem('token');
 
-  return data.pendingGoals
+  const response = await apiFetch(`${apiUrl}/pending-goals`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  const data = await response.json();
+
+  return data.pendingGoals;
 }

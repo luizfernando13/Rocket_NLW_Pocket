@@ -6,7 +6,6 @@ import { Separator } from './ui/separator'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getSummary } from '../http/get-summary'
 import dayjs from 'dayjs'
-//import '../../node_modules/dayjs/locale/pt-br'
 import { PendingGoals } from './pending-goals'
 import { WithCompletion } from './with-completion'
 
@@ -53,7 +52,7 @@ export function Summary() {
 
         <DialogTrigger asChild>
           <Button size="sm">
-            <Plus className="size-4"></Plus>
+            <Plus className="size-4" />
             Cadastrar Meta
           </Button>
         </DialogTrigger>

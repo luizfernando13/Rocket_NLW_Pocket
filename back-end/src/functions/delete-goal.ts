@@ -1,13 +1,30 @@
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import { db } from '../db'
 import { goals, goalCompletions } from '../db/schema'
 
 interface DeleteGoalRequest {
   goalId: string
+  userId: string
 }
 
-export async function deleteGoal({ goalId }: DeleteGoalRequest) {
+export async function deleteGoal({ goalId, userId }: DeleteGoalRequest) {
   try {
+        // Verificar se a meta pertence ao usuário
+      const [goal] = await db
+      .select()
+      .from(goals)
+      .where(
+        and(
+          eq(goals.id, goalId),
+          eq(goals.userId, userId)
+        )
+      )
+      .limit(1)
+
+    if (!goal) {
+      throw new Error('Meta não encontrada ou não pertence ao usuário.')
+    }
+
     // Deletar todas as entradas relacionadas em goal_completions
     await db
       .delete(goalCompletions)
