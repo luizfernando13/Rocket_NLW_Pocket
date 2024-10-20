@@ -4,6 +4,7 @@ import { CreateGoal } from './create-goal';
 import { Dialog } from './ui/dialog';
 import { EmptyGoals } from './empty-goals';
 import { getSummary } from '../http/get-summary';
+import { LoadingScreen } from './LoadingScreen'; // Importa o componente de loading
 
 export default function Dashboard() {
 
@@ -15,7 +16,7 @@ export default function Dashboard() {
   });
 
   if (isLoading) {
-    return <p>Carregando...</p>;
+    <LoadingScreen isLoading={isLoading} />;
   }
 
   // Verifica se há metas criadas

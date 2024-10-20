@@ -9,7 +9,7 @@ export const client = postgres(env.DATABASE_URL, {
   max: 10,                // Limita o número máximo de conexões simultâneas
   idle_timeout: 30,       // Tempo de inatividade antes de encerrar uma conexão
   connect_timeout: 30,    // Tempo de conexão máximo
-  keep_alive: true,       // Mantém a conexão ativa
+  keep_alive: 1,       // Mantém a conexão ativa
 });
 
 // Testa a conexão com o banco de dados

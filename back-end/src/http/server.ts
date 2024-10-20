@@ -30,7 +30,20 @@ declare module '@fastify/jwt' {
 const app = fastify().withTypeProvider<ZodTypeProvider>();
 
 app.register(fastifyCors, {
-  origin: '*',
+  origin: (origin, cb) => {
+    if (!origin) {
+      // Permitir requisições sem origem (como chamadas de servidores internos)
+      cb(null, true);
+      return;
+    }
+
+    // Permitir nlwpocket.vercel.app e localhost (ambos com e sem porta)
+    if (/nlwpocket\.vercel\.app/.test(origin) || /localhost(:\d+)?/.test(origin)) {
+      cb(null, true); // Permite requisições desses domínios
+    } else {
+      cb(new Error('Not allowed by CORS'), false); // Bloqueia requisições de outras origens
+    }
+  },
 });
 
 app.register(fastifyJwt, {
@@ -42,7 +55,7 @@ app.register(fastifyJwt, {
 
 app.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
   try {
-    const decoded = await request.jwtVerify();
+    const decoded = await request.jwtVerify<{ userId: string }>();
     
     // Verifica se o user_id ainda existe no banco de dados
     const userExists = await db.select().from(users).where(eq(users.id, decoded.userId)).limit(1);

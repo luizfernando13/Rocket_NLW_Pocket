@@ -1,5 +1,5 @@
 import React, { createContext, useState } from 'react';
-import { jwtDecode } from 'jwt-decode';
+import jwtDecode from "jwt-decode"
 
 interface AuthContextProps {
   isAuthenticated: boolean;
@@ -24,7 +24,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log('Token ao carregar a página:', token);
     if (token) {
       try {
-        const decoded = jwtDecode<JwtPayload>(token);
+        const decoded = jwtDecode<JwtPayload>(token); // Usa o genérico para tipar o JWT Payload
         const currentTime = Date.now() / 1000;
         if (decoded.exp < currentTime) {
           // Token expirado

@@ -2,7 +2,11 @@
   "files": [],
   "compilerOptions": {
     "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
+    "moduleResolution": "node",
+    "module": "ESNext",
+    "target": "ESNext",
+    "strict": true,
+    "skipLibCheck": true
   },
   "references": [
     { "path": "./tsconfig.app.json" },

@@ -1,5 +1,3 @@
-// web/src/components/PendingGoals.tsx
-
 import { useContext } from 'react';
 import { Plus, Trash2, LogOut } from 'lucide-react';
 import { OutlineButton } from './ui/outline-button';
@@ -9,6 +7,12 @@ import { createGoalCompletion } from '../http/create-goal-completion';
 import { getSummary } from '../http/get-summary';
 import deleteGoal from '../http/delete-goal';
 import { AuthContext } from '../AuthContext';
+import dayjs from 'dayjs'; // Importa o dayjs configurado
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 export function PendingGoals() {
   const queryClient = useQueryClient();
@@ -28,12 +32,40 @@ export function PendingGoals() {
 
   if (!goals) return null;
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = dayjs().tz('America/Sao_Paulo').format('YYYY-MM-DD');
+
+  const goalsPerDayAdjusted: {
+    [key: string]: {
+      id: string;
+      title: string;
+      completedAt: string;
+    }[];
+  } = {};
+
+  if (summaryData?.goalsPerDay) {
+    for (const [, goals] of Object.entries(summaryData.goalsPerDay)) {
+      for (const goal of goals) {
+        const adjustedCompletedAt = dayjs
+          .utc(goal.completedAt)
+          .tz('America/Sao_Paulo');
+        const adjustedDate = adjustedCompletedAt.format('YYYY-MM-DD');
+
+        if (!goalsPerDayAdjusted[adjustedDate]) {
+          goalsPerDayAdjusted[adjustedDate] = [];
+        }
+
+        goalsPerDayAdjusted[adjustedDate].push({
+          ...goal,
+          completedAt: adjustedCompletedAt.format('YYYY-MM-DDTHH:mm'),
+        });
+      }
+    }
+  }
 
   // Checa se o goal title já foi concluído hoje
   const titlesCompletedToday = new Set<string>();
-  if (summaryData?.goalsPerDay?.[today]) {
-    for (const goal of summaryData.goalsPerDay[today]) {
+  if (goalsPerDayAdjusted[today]) {
+    for (const goal of goalsPerDayAdjusted[today]) {
       titlesCompletedToday.add(goal.title);
     }
   }
@@ -55,7 +87,7 @@ export function PendingGoals() {
       {/* Botão de Logout */}
       <div className="absolute top-2 right-2 justify-end mb-4">
         <button
-          type='button'
+          type="button"
           onClick={logout}
           className="flex items-center px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition"
         >
