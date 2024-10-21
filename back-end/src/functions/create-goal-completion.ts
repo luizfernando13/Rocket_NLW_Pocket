@@ -2,7 +2,7 @@ import { and, count, eq, gte, lte, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { goalCompletions, goals } from '../db/schema';
 import dayjs from '../dayjsConfig'; // Importa o dayjs configurado
-import { Mutex } from 'async-mutex'; // Importa o mutex para controle de concorrência
+import { Mutex } from 'async-mutex';
 
 interface CreateGoalCompletionRequest {
   goalId: string;
@@ -32,16 +32,17 @@ export async function createGoalCompletion({
         throw new Error('Meta não encontrada ou não pertence ao usuário.');
       }
 
-      const now = dayjs().tz('America/Sao_Paulo');
-      const startOfDay = now.startOf('day').utc().toDate(); // 
-      const endOfDay = now.endOf('day').utc().toDate();
+      // Se "createdAt" for fornecido, usa essa data. Caso contrário, usa a data atual
+      const now = createdAt ? dayjs(createdAt).tz('America/Sao_Paulo') : dayjs().tz('America/Sao_Paulo');
+      
+      const startOfDay = now.startOf('day').toDate(); // Início do dia baseado na data fornecida
+      const endOfDay = now.endOf('day').toDate(); // Fim do dia baseado na data fornecida
 
-      const nowTz = createdAt
-        ? dayjs(createdAt).tz('America/Sao_Paulo').toDate()
-        : now.toDate();
+      const nowTz = now.toDate(); // A data com o timezone correto para São Paulo
 
       console.log('Now (Local Time):', nowTz);
 
+      // Verifica se a meta já foi completada no dia específico fornecido
       const completionToday = await db
         .select()
         .from(goalCompletions)
@@ -49,8 +50,8 @@ export async function createGoalCompletion({
           and(
             eq(goalCompletions.goalId, goalId),
             eq(goalCompletions.userId, userId),
-            gte(goalCompletions.createdAt, startOfDay), // A meta foi completada após o início do dia de hoje
-            lte(goalCompletions.createdAt, endOfDay) // A meta foi completada antes do final do dia de hoje
+            gte(goalCompletions.createdAt, startOfDay), // Verifica se completou após o início do dia
+            lte(goalCompletions.createdAt, endOfDay) // Verifica se completou antes do final do dia
           )
         )
         .limit(1);
@@ -60,12 +61,8 @@ export async function createGoalCompletion({
       }
 
       // Verifica a frequência semanal
-      const today = dayjs().tz('America/Sao_Paulo');
-      const startOfWeek = today.startOf('isoWeek');
-      const endOfWeek = today.endOf('isoWeek');
-
-      const firstDayOfWeek = startOfWeek.toDate();
-      const lastDayOfWeek = endOfWeek.toDate();
+      const startOfWeek = now.startOf('isoWeek').toDate();
+      const endOfWeek = now.endOf('isoWeek').toDate();
 
       const goalCompletionCounts = db.$with('goal_completion_counts').as(
         db
@@ -76,8 +73,8 @@ export async function createGoalCompletion({
           .from(goalCompletions)
           .where(
             and(
-              gte(goalCompletions.createdAt, firstDayOfWeek),
-              lte(goalCompletions.createdAt, lastDayOfWeek),
+              gte(goalCompletions.createdAt, startOfWeek),
+              lte(goalCompletions.createdAt, endOfWeek),
               eq(goalCompletions.goalId, goalId)
             )
           )
